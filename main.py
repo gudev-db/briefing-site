@@ -18,7 +18,7 @@ st.set_page_config(
 # Configuração do Gemini
 gemini_api_key = os.getenv("GEM_API_KEY")
 genai.configure(api_key=gemini_api_key)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Título da aplicação
 st.title("📋 Gerador de Briefing para Desenvolvimento de Site")
