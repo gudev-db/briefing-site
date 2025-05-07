@@ -296,7 +296,7 @@ with st.form("formulario_briefing"):
             "prazo": prazo
         }
         
-        campos_faltantes = [campo for campo, valor in campos_obrigatorios.items() if not value]
+        campos_faltantes = [campo for campo, valor in campos_obrigatorios.items() if not valor]
         if campos_faltantes:
             st.error(f"Por favor, preencha todos os campos obrigatórios. Faltando: {', '.join(campos_faltantes)}")
         else:
