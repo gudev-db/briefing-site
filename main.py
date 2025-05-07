@@ -350,11 +350,6 @@ with st.form("formulario_briefing"):
                     st.success("Briefing gerado com sucesso!")
                     st.subheader("📄 Briefing Completo para Desenvolvimento de Site")
                     st.markdown(briefing)
+                    st.markdown(projeto)
                     
-                    # Opção para download
-                    st.download_button(
-                        label="Baixar Briefing",
-                        data=briefing,
-                        file_name=f"briefing_site_{nome_empresa}_{datetime.now().strftime('%Y%m%d')}.md",
-                        mime="text/markdown"
-                    )
+                 
