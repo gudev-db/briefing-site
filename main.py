@@ -5,6 +5,8 @@ import os
 import streamlit as st
 import google.generativeai as genai
 from datetime import datetime
+import pandas as pd
+import io
 
 # Configuração da página
 st.set_page_config(
@@ -16,14 +18,61 @@ st.set_page_config(
 # Configuração do Gemini
 gemini_api_key = os.getenv("GEM_API_KEY")
 genai.configure(api_key=gemini_api_key)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-pro')
 
 # Título da aplicação
 st.title("📋 Gerador de Briefing para Desenvolvimento de Site")
 st.markdown("""
-Preencha o formulário abaixo com as informações sobre o projeto do seu site. 
-Ao final, geraremos automaticamente um briefing completo para orientar o desenvolvimento.
+Preencha o formulário abaixo ou faça upload de um arquivo CSV com as respostas para gerar automaticamente um briefing completo.
 """)
+
+# Função para mapear colunas do CSV para o formato interno
+def mapear_csv_para_respostas(df):
+    # Pega a primeira linha (assumindo que há apenas um registro no CSV)
+    row = df.iloc[0]
+    
+    respostas = {
+        "nome_empresa": row.get("Nome da sua empresa/Instituição", ""),
+        "nome_responsavel": row.get("Nome:", ""),
+        "cargo_responsavel": row.get("Cargo:", ""),
+        "email_responsavel": row.get("E-mail:", ""),
+        "telefone_responsavel": row.get("Telefone:", ""),
+        "descricao_site": row.get("Por favor, descreva o site que deseja.", ""),
+        "objetivos_principais": row.get("Quais são os principais objetivos que você deseja alcançar com o site?", ""),
+        "objetivos_secundarios": row.get("Há objetivos secundários que o site deve atingir?", ""),
+        "publico_alvo": row.get("Quem é o público-alvo do seu site?", ""),
+        "segmentos_especificos": row.get("Há algum segmento específico que precisa ser destacado no site?", ""),
+        "concorrentes": row.get("Quem são os seus principais concorrentes?", ""),
+        "gosta_concorrentes": row.get("O que você gosta nos sites dos seus concorrentes?", ""),
+        "nao_gosta_concorrentes": row.get("O que você não gosta nos sites dos seus concorrentes?", ""),
+        "diferenciais": row.get("O que você espera que seu site ofereça de diferente em relação aos concorrentes?", ""),
+        "funcionalidades": row.get("Quais funcionalidades específicas você gostaria de incluir no site?", ""),
+        "conteudo_pronto": "Sim" if str(row.get("Você já possui todo o conteúdo pronto (textos, imagens, vídeos)?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "numero_paginas": row.get("Quantas páginas aproximadamente o site terá?", ""),
+        "paginas_desejadas": row.get("Quais páginas você gostaria de incluir no novo site?", ""),
+        "percepcao_visual": row.get("Como você gostaria que o site fosse visualmente percebido?", ""),
+        "referencias_gosta": row.get("Há algum site ou referência visual que você gosta?", ""),
+        "referencias_nao_gosta": row.get("Há alguma referência visual que você não gosta?", ""),
+        "seo": "Sim" if str(row.get("O site precisa ser otimizado para SEO?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "otimizacoes_seo": row.get("Se sim, gostaria de incluir algum tipo de otimização específica?", ""),
+        "mobile_prioritario": "Sim" if str(row.get("A versão mobile do site é uma prioridade?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "ssl": "Sim" if str(row.get("Você precisa de algum certificado de segurança SSL para o site?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "plataforma": row.get("Você tem alguma preferência de plataforma para o desenvolvimento do site?", ""),
+        "hospedagem": "Sim" if str(row.get("Você já possui um serviço de hospedagem para o site?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "uso_dados": "Sim" if str(row.get("Você deseja utilizar dados de usuários no seu site (exemplo: cookies, analytics)?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "banner_cookies": "Sim" if str(row.get("Será necessário implementar alguma solução de governança digital, como banner de consentimento para cookies?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "tagueamento": "Sim" if str(row.get("Você precisará de tagueamento de dados para monitoramento de ações no site?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "tags_especificas": row.get("Quais tags de conversão ou tracking você precisará integrar?", ""),
+        "integracoes": "Sim" if str(row.get("Você irá integrar o site com plataformas externas ou APIs?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "detalhes_integracoes": row.get("Quais integrações específicas?", ""),
+        "prazo": row.get("Qual a sua expectativa de prazo para o lançamento do novo site?", ""),
+        "tem_orcamento": "Sim" if str(row.get("Você já tem um orçamento estimado para esse projeto?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "orcamento": row.get("Orçamento estimado", ""),
+        "manutencao": "Sim" if str(row.get("Após o lançamento, você precisará de serviços de manutenção contínuos?", "")).lower().startswith(('sim', 's', 'yes', 'y')) else "Não",
+        "consideracoes_finais": f"{row.get('Há alguma outra necessidade ou exigência que não foi mencionada?', '')}\n\n{row.get('Alguma consideração adicional sobre o projeto que gostaria de compartilhar conosco?', '')}"
+    }
+    
+    return respostas
 
 # Função para gerar o briefing com a LLM
 def gerar_briefing(respostas):
@@ -126,16 +175,51 @@ def gerar_briefing(respostas):
     """
     
     try:
-        response1 = model.generate_content(prompt)
-        response = model.generate_content(f''' Baseado no briefing gerado em ({response1}, gere uma proposta de projeto de site, especificando tudo. Desde como o site em si será, a prazo, custo, detalhamento do projeto inteiro, tudo. ''')
-        return response1.text, response.text
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
         st.error(f"Erro ao gerar o briefing: {str(e)}")
         return None
 
-# Formulário de coleta de informações
+# Opção de upload de CSV
+st.sidebar.header("Opção de Upload")
+uploaded_file = st.sidebar.file_uploader("Faça upload de um arquivo CSV com as respostas", type=["csv"])
+
+if uploaded_file is not None:
+    try:
+        # Lê o arquivo CSV
+        df = pd.read_csv(uploaded_file)
+        
+        # Mostra pré-visualização
+        st.sidebar.subheader("Pré-visualização do CSV")
+        st.sidebar.write(df.head())
+        
+        # Mapeia para o formato interno
+        respostas = mapear_csv_para_respostas(df)
+        
+        # Gera o briefing
+        with st.spinner("Gerando briefing a partir do CSV..."):
+            briefing = gerar_briefing(respostas)
+            
+            if briefing:
+                st.success("Briefing gerado com sucesso a partir do CSV!")
+                st.subheader("📄 Briefing Completo para Desenvolvimento de Site")
+                st.markdown(briefing)
+                
+                # Opção para download
+                st.download_button(
+                    label="Baixar Briefing",
+                    data=briefing,
+                    file_name=f"briefing_site_{respostas['nome_empresa']}_{datetime.now().strftime('%Y%m%d')}.md",
+                    mime="text/markdown"
+                )
+    except Exception as e:
+        st.error(f"Erro ao processar o arquivo CSV: {str(e)}")
+
+# Formulário manual
+st.header("Ou preencha o formulário manualmente")
 with st.form("formulario_briefing"):
-    st.header("Informações Básicas")
+    st.subheader("Informações Básicas")
     col1, col2 = st.columns(2)
     with col1:
         nome_empresa = st.text_input("Nome da empresa/instituição*", key="nome_empresa")
@@ -145,12 +229,12 @@ with st.form("formulario_briefing"):
         email_responsavel = st.text_input("E-mail*", key="email_responsavel")
         telefone_responsavel = st.text_input("Telefone*", key="telefone_responsavel")
 
-    st.header("Descrição do Site")
+    st.subheader("Descrição do Site")
     descricao_site = st.text_area("Descreva o site que deseja*", 
                                  placeholder="Ex: Um site institucional que apresenta a empresa e seus serviços...",
                                  key="descricao_site")
 
-    st.header("Objetivos do Site")
+    st.subheader("Objetivos do Site")
     objetivos_principais = st.text_area("Principais objetivos*",
                                       placeholder="Ex: Melhorar a imagem institucional, facilitar a navegação...",
                                       key="objetivos_principais")
@@ -158,7 +242,7 @@ with st.form("formulario_briefing"):
                                        placeholder="Ex: Aumentar o tráfego orgânico, coletar dados de leads...",
                                        key="objetivos_secundarios")
 
-    st.header("Público-Alvo")
+    st.subheader("Público-Alvo")
     publico_alvo = st.text_area("Quem é o público-alvo do seu site?*",
                               placeholder="Descreva faixa etária, interesses, localização geográfica...",
                               key="publico_alvo")
@@ -166,7 +250,7 @@ with st.form("formulario_briefing"):
                                         placeholder="Ex: Clientes de uma região específica, público jovem...",
                                         key="segmentos_especificos")
 
-    st.header("Concorrência e Diferenciação")
+    st.subheader("Concorrência e Diferenciação")
     concorrentes = st.text_input("Quem são seus principais concorrentes?",
                                placeholder="Liste os principais concorrentes",
                                key="concorrentes")
@@ -183,7 +267,7 @@ with st.form("formulario_briefing"):
                               placeholder="Funcionalidades exclusivas, diferenciação no atendimento...",
                               key="diferenciais")
 
-    st.header("Características e Funcionalidades do Site")
+    st.subheader("Características e Funcionalidades do Site")
     funcionalidades = st.text_area("Quais funcionalidades específicas você gostaria de incluir?*",
                                  placeholder="Formulários de contato, área de login, blog...",
                                  key="funcionalidades")
@@ -199,7 +283,7 @@ with st.form("formulario_briefing"):
                                    placeholder="Home, Sobre, Produtos, Contato, Blog...",
                                    key="paginas_desejadas")
 
-    st.header("Estilo e Design")
+    st.subheader("Estilo e Design")
     percepcao_visual = st.text_input("Como você gostaria que o site fosse visualmente percebido?*",
                                    placeholder="Ex: Como uma marca confiável, moderna, especializada...",
                                    key="percepcao_visual")
@@ -213,7 +297,7 @@ with st.form("formulario_briefing"):
                                            placeholder="Links ou descrição dos pontos negativos",
                                            key="referencias_nao_gosta")
 
-    st.header("SEO, Performance e Segurança")
+    st.subheader("SEO, Performance e Segurança")
     col1, col2, col3 = st.columns(3)
     with col1:
         seo = st.radio("O site precisa ser otimizado para SEO?", ("Sim", "Não"), key="seo")
@@ -226,7 +310,7 @@ with st.form("formulario_briefing"):
                                       placeholder="SEO local, SEO para produtos/serviços...",
                                       key="otimizacoes_seo")
 
-    st.header("Aspectos Técnicos e Hospedagem")
+    st.subheader("Aspectos Técnicos e Hospedagem")
     col1, col2 = st.columns(2)
     with col1:
         plataforma = st.text_input("Preferência de plataforma para desenvolvimento",
@@ -235,7 +319,7 @@ with st.form("formulario_briefing"):
     with col2:
         hospedagem = st.radio("Você já possui hospedagem?", ("Sim", "Não"), key="hospedagem")
 
-    st.header("Governança Digital e Tagueamento")
+    st.subheader("Governança Digital e Tagueamento")
     col1, col2, col3 = st.columns(3)
     with col1:
         uso_dados = st.radio("Deseja usar dados de usuários (cookies, analytics)?", ("Sim", "Não"), key="uso_dados")
@@ -249,14 +333,14 @@ with st.form("formulario_briefing"):
                                        placeholder="Pixel do Facebook, Google Analytics...",
                                        key="tags_especificas")
 
-    st.header("Integrações")
+    st.subheader("Integrações")
     integracoes = st.radio("Precisará integrar com plataformas externas ou APIs?", ("Sim", "Não"), key="integracoes")
     if integracoes == "Sim":
         detalhes_integracoes = st.text_input("Quais integrações específicas?",
                                            placeholder="APIs para conversão do Meta, CRM...",
                                            key="detalhes_integracoes")
 
-    st.header("Cronograma e Orçamento")
+    st.subheader("Cronograma e Orçamento")
     col1, col2 = st.columns(2)
     with col1:
         prazo = st.text_input("Expectativa de prazo para lançamento*",
@@ -270,7 +354,7 @@ with st.form("formulario_briefing"):
                                     key="orcamento")
     manutencao = st.radio("Precisará de manutenção contínua após lançamento?", ("Sim", "Não"), key="manutencao")
 
-    st.header("Considerações Finais")
+    st.subheader("Considerações Finais")
     consideracoes_finais = st.text_area("Alguma outra necessidade ou exigência não mencionada?",
                                       placeholder="Informações adicionais relevantes...",
                                       key="consideracoes_finais")
@@ -290,6 +374,7 @@ with st.form("formulario_briefing"):
             "publico_alvo": publico_alvo,
             "diferenciais": diferenciais,
             "funcionalidades": funcionalidades,
+            "conteudo_pronto": conteudo_pronto,
             "numero_paginas": numero_paginas,
             "paginas_desejadas": paginas_desejadas,
             "percepcao_visual": percepcao_visual,
@@ -344,12 +429,17 @@ with st.form("formulario_briefing"):
 
             # Gerar o briefing
             with st.spinner("Gerando briefing profissional..."):
-                briefing, projeto = gerar_briefing(respostas)
+                briefing = gerar_briefing(respostas)
                 
                 if briefing:
                     st.success("Briefing gerado com sucesso!")
                     st.subheader("📄 Briefing Completo para Desenvolvimento de Site")
                     st.markdown(briefing)
-                    st.markdown(projeto)
                     
-                 
+                    # Opção para download
+                    st.download_button(
+                        label="Baixar Briefing",
+                        data=briefing,
+                        file_name=f"briefing_site_{nome_empresa}_{datetime.now().strftime('%Y%m%d')}.md",
+                        mime="text/markdown"
+                    )
